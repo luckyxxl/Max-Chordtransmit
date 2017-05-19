@@ -15,9 +15,11 @@ typedef struct _buffer
 typedef struct _fftpack
 {
 	t_pxobject obj;
-	void *outlet, *outlet_peaks;
+	void *outlet_peaks, *outlet;
 	int write_buffer, read_buffer, copy_buffer;
 	int warn_overflow;
+
+	double peak_threshold;
 
 	t_buffer buffers[3];
 } t_fftpack;
@@ -27,6 +29,7 @@ void fftpack_free(t_fftpack *x);
 void fftpack_dsp64(t_fftpack *x, t_object *dsp64, short *count, double samplerate, long maxvectorsize, long flags);
 void fftpack_perform64(t_fftpack *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam);
 void fftpack_bang(t_fftpack *x);
+void fftpack_thres(t_fftpack *x, double thres);
 
 static t_class *fftpack_class = NULL;
 
@@ -36,6 +39,7 @@ void ext_main(void *r)
 	class_dspinit(c);
 	class_addmethod(c, (method)fftpack_dsp64, "dsp64", A_CANT, 0);
 	class_addmethod(c, (method)fftpack_bang, "bang", 0);
+	class_addmethod(c, (method)fftpack_thres, "thres", A_FLOAT, 0);
 
 	class_register(CLASS_BOX, c);
 	fftpack_class = c;
@@ -56,6 +60,8 @@ void *fftpack_new(t_symbol *s, long argc, t_atom *argv)
 	x->copy_buffer = 2;
 
 	x->warn_overflow = 0;
+
+	x->peak_threshold = 100.f;
 
 	for(size_t i=0u; i<countof(x->buffers); ++i)
 	{
@@ -139,9 +145,11 @@ void fftpack_bang(t_fftpack *x)
 		t_atom result[countof(copy_buffer->data)];
 		long result_length = 0;
 
-		for(long i=0; i<copy_buffer->size/2; ++i)
+		double *d = copy_buffer->data;
+
+		for(size_t i=1; i<copy_buffer->size/2-1; ++i)
 		{
-			if(copy_buffer->data[i] > 100.f)
+			if(d[i-1] < d[i] && d[i] > d[i+1] && d[i] >= x->peak_threshold)
 			{
 				atom_setlong(&result[result_length++], i);
 			}
@@ -153,10 +161,15 @@ void fftpack_bang(t_fftpack *x)
 	// fft
 	{
 		t_atom result[countof(copy_buffer->data)];
-		long result_length = copy_buffer->size/2; //:HACK: reducing list length by 2 here... this is not really nice but zl does not work very well with large lists...
+		size_t result_length = copy_buffer->size/2; //:HACK: reducing list length by 2 here... this is not really nice but zl does not work very well with large lists...
 
 		atom_setdouble_array(result_length, result, countof(copy_buffer->data), copy_buffer->data);
 
 		outlet_list(x->outlet, NULL, result_length, result);
 	}
+}
+
+void fftpack_thres(t_fftpack *x, double thres)
+{
+	x->peak_threshold = thres;
 }
