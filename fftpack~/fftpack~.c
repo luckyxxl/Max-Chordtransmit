@@ -140,6 +140,8 @@ void fftpack_bang(t_fftpack *x)
 
 	t_buffer *copy_buffer = &x->buffers[x->copy_buffer];
 
+	if(copy_buffer->size == 0) return;
+
 	// peaks
 	{
 		t_atom result[countof(copy_buffer->data)];
